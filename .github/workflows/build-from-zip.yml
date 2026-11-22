@@ -76,7 +76,10 @@ jobs:
             https://developer.download.nvidia.com/cg/Cg_3.1/Cg-3.1_April2012_x86_64.tgz
           tar -xzf /tmp/cg.tgz -C /opt/cg
           CGC="$(find /opt/cg -type f -name cgc -perm -111 | head -n1)"
-          CG_LIB_FILE="$(find /opt/cg -type f -name 'libCg.so*' | head -n1)"
+          CG_LIB_FILE="$(find /opt/cg -type f -name 'libCg.so' ! -path '*/Trace/*' ! -path '*/trace/*' | head -n1)"
+          if [ -z "$CG_LIB_FILE" ]; then
+            CG_LIB_FILE="$(find /opt/cg -type f -name 'libCg.so.*' ! -path '*/Trace/*' ! -path '*/trace/*' | head -n1)"
+          fi
           test -n "$CGC"
           test -n "$CG_LIB_FILE"
           CG_LIB="$(dirname "$CG_LIB_FILE")"
