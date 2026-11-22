@@ -54,6 +54,9 @@ jobs:
           echo "/opt/ps3dev/bin" >> "$GITHUB_PATH"
           echo "/opt/ps3dev/ppu/bin" >> "$GITHUB_PATH"
           echo "/opt/ps3dev/spu/bin" >> "$GITHUB_PATH"
+          export PS3DEV=/opt/ps3dev
+          export PSL1GHT=/opt/ps3dev
+          export PATH="/opt/ps3dev/bin:/opt/ps3dev/ppu/bin:/opt/ps3dev/spu/bin:$PATH"
           test -s /opt/ps3dev/ppu/lib/librsx.a
           command -v ppu-gcc
           command -v cgcomp
