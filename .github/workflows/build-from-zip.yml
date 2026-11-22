@@ -1,4 +1,47 @@
+name: Build PS3 PKG from ZIP
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: ps3-zip-build-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      PS3_BUILD_JOBS: 2
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install host tools
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "$(uname -m)" = "x86_64"
+          sudo apt-get update
+          sudo apt-get install -y git build-essential autoconf automake libtool pkg-config python3 unzip zip curl ca-certificates
+
+      - name: Extract project ZIP
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          ZIP_FILE="$(find . -maxdepth 1 -type f -iname '*.zip' | head -n1)"
+          test -n "$ZIP_FILE"
+          rm -rf /tmp/poppy-source
+          unzip -q "$ZIP_FILE" -d /tmp/poppy-source
+          PROJECT="$(find /tmp/poppy-source -maxdepth 2 -type f -name Makefile -printf '%h\n' | head -n1)"
+          test -n "$PROJECT"
+          echo "PROJECT=$PROJECT" >> "$GITHUB_ENV"
+
       - name: Install PS3 toolchain
+        shell: bash
         run: |
           set -Eeuo pipefail
           sudo mkdir -p /opt/ps3dev
@@ -13,3 +56,41 @@
           echo "/opt/ps3dev/ppu/bin" >> "$GITHUB_PATH"
           echo "/opt/ps3dev/bin" >> "$GITHUB_PATH"
           echo "/opt/ps3dev/psl1ght/bin" >> "$GITHUB_PATH"
+
+      - name: Build PSL1GHT
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          rm -rf /tmp/PSL1GHT
+          git clone --depth 1 https://github.com/ps3dev/PSL1GHT.git /tmp/PSL1GHT
+          cd /tmp/PSL1GHT
+          mkdir -p "$PSL1GHT"
+          timeout 40m make install-ctrl 2>&1 | tee /tmp/psl1ght-ctrl.log
+          timeout 40m make -j2 install 2>&1 | tee /tmp/psl1ght-build.log
+          test -s "$PSL1GHT/ppu/lib/librsx.a"
+          command -v cgcomp
+          command -v fself
+          command -v sfo
+          command -v pkg
+
+      - name: Build EBOOT and PKG
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cd "$PROJECT"
+          timeout 30m bash tools/build.sh
+          timeout 10m bash tools/package.sh
+          test -s dist/app_home/USRDIR/EBOOT.BIN
+          test -s dist/PoppyPlaytime_Capitulo1_PS3.pkg
+
+      - name: Upload PKG and diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: PoppyPlaytime-PS3-build
+          if-no-files-found: warn
+          path: |
+            /tmp/poppy-source/**/dist/**
+            /tmp/poppy-source/**/poppy_ps3.elf
+            /tmp/poppy-source/**/build/**
+            /tmp/psl1ght-*.log
