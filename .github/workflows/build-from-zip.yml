@@ -1,86 +1,15 @@
-name: Build PS3 PKG from ZIP
-
-on:
-  workflow_dispatch:
-
-concurrency:
-  group: ps3-zip-build-${{ github.ref }}
-  cancel-in-progress: true
-
-permissions:
-  contents: read
-
-jobs:
-  build:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 120
-    env:
-      PS3_BUILD_JOBS: 2
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Install host tools
-        run: |
-          set -Eeuo pipefail
-          test "$(uname -m)" = x86_64
-          sudo apt-get update
-          sudo apt-get install -y git build-essential autoconf automake libtool pkg-config python3 unzip zip curl ca-certificates
-
-      - name: Extract project ZIP
-        run: |
-          set -Eeuo pipefail
-          ZIP_FILE=$(find . -maxdepth 1 -type f -iname '*.zip' | head -n1)
-          test -n "$ZIP_FILE"
-          unzip -q "$ZIP_FILE" -d /tmp/poppy-source
-          PROJECT=$(find /tmp/poppy-source -maxdepth 2 -type f -name Makefile -printf '%h\n' | head -n1)
-          test -n "$PROJECT"
-          echo "PROJECT=$PROJECT" >> "$GITHUB_ENV"
-
       - name: Install PS3 toolchain
         run: |
           set -Eeuo pipefail
-          curl -fsSL --retry 5 --retry-all-errors https://api.github.com/repos/ps3dev/ps3toolchain/releases > /tmp/releases.json
-          URL=$(python3 -c 'import json,sys; d=json.load(sys.stdin); u=[a["browser_download_url"] for r in d for a in r.get("assets",[]) if a["name"]=="ps3dev-linux-X64.tar.gz"]; print(u[0] if u else "")' < /tmp/releases.json)
-          test -n "$URL"
           sudo mkdir -p /opt/ps3dev
           sudo chown "$USER:$USER" /opt/ps3dev
-          curl -fL --retry 5 --retry-all-errors -o /tmp/ps3dev.tar.gz "$URL"
+          curl -fL --retry 5 --retry-all-errors \
+            -o /tmp/ps3dev.tar.gz \
+            https://github.com/ps3dev/ps3dev/releases/download/nightly-2026-11-16/ps3dev-linux-X64.tar.gz
+          echo '1d4a518cd0afc05dd75246d71ca016d8f8aa918ba3ec452ba92b865137afe054  /tmp/ps3dev.tar.gz' | sha256sum -c -
           tar -xzf /tmp/ps3dev.tar.gz -C /opt/ps3dev --strip-components=1
           echo "PS3DEV=/opt/ps3dev" >> "$GITHUB_ENV"
           echo "PSL1GHT=/opt/ps3dev/psl1ght" >> "$GITHUB_ENV"
           echo "/opt/ps3dev/ppu/bin" >> "$GITHUB_PATH"
           echo "/opt/ps3dev/bin" >> "$GITHUB_PATH"
           echo "/opt/ps3dev/psl1ght/bin" >> "$GITHUB_PATH"
-
-      - name: Build PSL1GHT
-        run: |
-          set -Eeuo pipefail
-          git clone --depth 1 https://github.com/ps3dev/PSL1GHT.git /tmp/PSL1GHT
-          cd /tmp/PSL1GHT
-          mkdir -p "$PSL1GHT"
-          timeout 40m make install-ctrl 2>&1 | tee /tmp/psl1ght-ctrl.log
-          timeout 40m make -j2 install 2>&1 | tee /tmp/psl1ght-build.log
-          test -s "$PSL1GHT/ppu/lib/librsx.a"
-          command -v cgcomp fself sfo pkg
-
-      - name: Build EBOOT and PKG
-        run: |
-          set -Eeuo pipefail
-          cd "$PROJECT"
-          timeout 30m bash tools/build.sh
-          timeout 10m bash tools/package.sh
-          test -s dist/app_home/USRDIR/EBOOT.BIN
-          test -s dist/PoppyPlaytime_Capitulo1_PS3.pkg
-
-      - name: Upload PKG
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: PoppyPlaytime-PS3-build
-          if-no-files-found: warn
-          path: |
-            /tmp/poppy-source/**/dist/**
-            /tmp/poppy-source/**/poppy_ps3.elf
-            /tmp/poppy-source/**/build/**
-            /tmp/psl1ght-*.log
