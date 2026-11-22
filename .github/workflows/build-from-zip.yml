@@ -76,13 +76,17 @@ jobs:
             https://developer.download.nvidia.com/cg/Cg_3.1/Cg-3.1_April2012_x86_64.tgz
           tar -xzf /tmp/cg.tgz -C /opt/cg
           CGC="$(find /opt/cg -type f -name cgc -perm -111 | head -n1)"
-          CG_LIB="$(find /opt/cg -type f -name 'libCg.so*' -printf '%h\n' | head -n1)"
+          CG_LIB_FILE="$(find /opt/cg -type f -name 'libCg.so*' | head -n1)"
           test -n "$CGC"
-          test -n "$CG_LIB"
+          test -n "$CG_LIB_FILE"
+          CG_LIB="$(dirname "$CG_LIB_FILE")"
+          sudo ln -sf "$CG_LIB_FILE" /usr/lib/libCg.so
+          sudo ldconfig
           echo "$(dirname "$CGC")" >> "$GITHUB_PATH"
-          echo "LD_LIBRARY_PATH=$CG_LIB:${LD_LIBRARY_PATH:-}" >> "$GITHUB_ENV"
+          echo "LD_LIBRARY_PATH=/usr/lib:$CG_LIB:${LD_LIBRARY_PATH:-}" >> "$GITHUB_ENV"
           export PATH="$(dirname "$CGC"):$PATH"
-          export LD_LIBRARY_PATH="$CG_LIB:${LD_LIBRARY_PATH:-}"
+          export LD_LIBRARY_PATH="/usr/lib:$CG_LIB:${LD_LIBRARY_PATH:-}"
+          test -e /usr/lib/libCg.so
           command -v cgc
 
       - name: Build EBOOT and PKG
