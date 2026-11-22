@@ -64,6 +64,27 @@ jobs:
           command -v sfo
           command -v pkg
 
+      - name: Install NVIDIA Cg Toolkit runtime
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          rm -rf /opt/cg /tmp/cg-package /tmp/cg.tgz
+          sudo mkdir -p /opt/cg
+          sudo chown "$USER:$USER" /opt/cg
+          curl -fL --retry 10 --retry-all-errors --retry-delay 2 \
+            -o /tmp/cg.tgz \
+            https://developer.download.nvidia.com/cg/Cg_3.1/Cg-3.1_April2012_x86_64.tgz
+          tar -xzf /tmp/cg.tgz -C /opt/cg
+          CGC="$(find /opt/cg -type f -name cgc -perm -111 | head -n1)"
+          CG_LIB="$(find /opt/cg -type f -name 'libCg.so*' -printf '%h\n' | head -n1)"
+          test -n "$CGC"
+          test -n "$CG_LIB"
+          echo "$(dirname "$CGC")" >> "$GITHUB_PATH"
+          echo "LD_LIBRARY_PATH=$CG_LIB:${LD_LIBRARY_PATH:-}" >> "$GITHUB_ENV"
+          export PATH="$(dirname "$CGC"):$PATH"
+          export LD_LIBRARY_PATH="$CG_LIB:${LD_LIBRARY_PATH:-}"
+          command -v cgc
+
       - name: Build EBOOT and PKG
         shell: bash
         run: |
