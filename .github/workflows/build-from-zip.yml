@@ -13,9 +13,7 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-24.04
-    timeout-minutes: 120
-    env:
-      PS3_BUILD_JOBS: 2
+    timeout-minutes: 90
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -26,7 +24,7 @@ jobs:
           set -Eeuo pipefail
           test "$(uname -m)" = "x86_64"
           sudo apt-get update
-          sudo apt-get install -y git build-essential autoconf automake libtool pkg-config python3 unzip zip curl ca-certificates
+          sudo apt-get install -y python3 unzip zip curl ca-certificates
 
       - name: Extract project ZIP
         shell: bash
@@ -40,7 +38,7 @@ jobs:
           test -n "$PROJECT"
           echo "PROJECT=$PROJECT" >> "$GITHUB_ENV"
 
-      - name: Install PS3 toolchain
+      - name: Install complete PS3DEV SDK
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -52,22 +50,12 @@ jobs:
           echo '1d4a518cd0afc05dd75246d71ca016d8f8aa918ba3ec452ba92b865137afe054  /tmp/ps3dev.tar.gz' | sha256sum -c -
           tar -xzf /tmp/ps3dev.tar.gz -C /opt/ps3dev --strip-components=1
           echo "PS3DEV=/opt/ps3dev" >> "$GITHUB_ENV"
-          echo "PSL1GHT=/opt/ps3dev/psl1ght" >> "$GITHUB_ENV"
-          echo "/opt/ps3dev/ppu/bin" >> "$GITHUB_PATH"
+          echo "PSL1GHT=/opt/ps3dev" >> "$GITHUB_ENV"
           echo "/opt/ps3dev/bin" >> "$GITHUB_PATH"
-          echo "/opt/ps3dev/psl1ght/bin" >> "$GITHUB_PATH"
-
-      - name: Build PSL1GHT
-        shell: bash
-        run: |
-          set -Eeuo pipefail
-          rm -rf /tmp/PSL1GHT
-          git clone --depth 1 https://github.com/ps3dev/PSL1GHT.git /tmp/PSL1GHT
-          cd /tmp/PSL1GHT
-          mkdir -p "$PSL1GHT"
-          timeout 40m make install-ctrl 2>&1 | tee /tmp/psl1ght-ctrl.log
-          timeout 40m make -j2 install 2>&1 | tee /tmp/psl1ght-build.log
-          test -s "$PSL1GHT/ppu/lib/librsx.a"
+          echo "/opt/ps3dev/ppu/bin" >> "$GITHUB_PATH"
+          echo "/opt/ps3dev/spu/bin" >> "$GITHUB_PATH"
+          test -s /opt/ps3dev/ppu/lib/librsx.a
+          command -v ppu-gcc
           command -v cgcomp
           command -v fself
           command -v sfo
@@ -79,9 +67,11 @@ jobs:
           set -Eeuo pipefail
           cd "$PROJECT"
           timeout 30m bash tools/build.sh
+          test -s poppy_ps3.elf
           timeout 10m bash tools/package.sh
           test -s dist/app_home/USRDIR/EBOOT.BIN
           test -s dist/PoppyPlaytime_Capitulo1_PS3.pkg
+          stat -c '%s bytes  %n' dist/app_home/USRDIR/EBOOT.BIN dist/PoppyPlaytime_Capitulo1_PS3.pkg
 
       - name: Upload PKG and diagnostics
         if: always()
@@ -93,4 +83,3 @@ jobs:
             /tmp/poppy-source/**/dist/**
             /tmp/poppy-source/**/poppy_ps3.elf
             /tmp/poppy-source/**/build/**
-            /tmp/psl1ght-*.log
